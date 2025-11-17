@@ -1,18 +1,17 @@
-import React, {useReducer, useState, useEffect, useContext} from "react";
-import ReqHistoryCard from "../components/ReqHistoryCard";
-import { Truck} from 'lucide-react';
-import api from "../api/axios";
+import React, { useReducer, useState, useEffect, useContext } from "react";
+import { useLocation } from "react-router-dom";
+import { Truck } from "lucide-react";
+import axios from "axios";
 import { AppContent } from "../context/AppContext";
+import ReqHistoryCard from "../components/ReqHistoryCard";
 import LoadingSpinner from "../components/LoadingSpinner";
-
 
 const initState = {
   address: "",
   material: [],
-  weight: null,
-  pickup_status: "pending",
+  weight: "",
   instructions: "",
-  scheduled_date: null, 
+  scheduled_date: null,
   time_slot: null,
   created_at: new Date().toLocaleDateString("en-EG", {
     timeZone: "Africa/Cairo",
@@ -27,27 +26,26 @@ const reducers = (state, action) => {
       return { ...state, time_slot: action.payload };
     case "SET_ADDRESS":
       return { ...state, address: action.payload };
-    case "SET_MATERIAL":
-      const material = action.payload;
+    case "SET_MATERIAL": {
+      const material = action.payload.toLowerCase();
       const currentMaterials = state.material;
-      
       if (currentMaterials.includes(material)) {
-        // Remove if already selected
-        return { ...state, material: currentMaterials.filter(m => m !== material) };
-      } else {
-        // Add if not selected
-        return { ...state, material: [...currentMaterials, material] };
+        return { ...state, material: currentMaterials.filter((m) => m !== material) };
       }
+      return { ...state, material: [...currentMaterials, material] };
+    }
+    case "SET_DETECTED_MATERIALS":
+      return { ...state, material: action.payload.map((m) => m.toLowerCase()) };
     case "SET_WEIGHT":
-      return{...state, weight: action.payload};
+      return { ...state, weight: action.payload };
     case "SET_INSTRUCTIONS":
-      return{...state, instructions: action.payload};
+      return { ...state, instructions: action.payload };
     case "RESET_FORM":
       return {
         ...initState,
         created_at: new Date().toLocaleDateString("en-EG", {
           timeZone: "Africa/Cairo",
-        })
+        }),
       };
     default:
       return state;
@@ -55,7 +53,10 @@ const reducers = (state, action) => {
 };
 
 const PickupPage = () => {
-  const { userData, isLoggedin, loadingUser } = useContext(AppContent);
+  const { userData, isLoggedin, loadingUser, refreshUserData, backendUrl } = useContext(AppContent);
+  const location = useLocation();
+  const prefilledItems = location.state?.items || []; // Expecting array of objects when present (B)
+
   const [state, dispatch] = useReducer(reducers, initState);
   const [submited, setSubmited] = useState(false);
   const [pickupHistory, setPickupHistory] = useState([]);
@@ -63,133 +64,168 @@ const PickupPage = () => {
   const [success, setSuccess] = useState(false);
   const [editingPickupId, setEditingPickupId] = useState(null);
 
+  // Prefill AI-detected items (expects objects: { type, quantity, baseWeight, points, estimatedValue })
+  useEffect(() => {
+    if (!prefilledItems || !prefilledItems.length) return;
 
-//Function to fetch pickups for current user
-const fetchMyPickups = async () => {
-   console.log("1. isLoggedin:", isLoggedin);
-  console.log("2. userData:", userData);
-  console.log("3. userId:", userData?.id);
-  console.log("4. loadingUser:", loadingUser);
-    if(!isLoggedin || !userData?.id) {
+    const detectedMaterials = prefilledItems.map((i) => i.type);
+    dispatch({ type: "SET_DETECTED_MATERIALS", payload: detectedMaterials });
+
+    const totalWeight = prefilledItems.reduce(
+      (sum, i) => sum + (i.baseWeight || 0) * (i.quantity || 1),
+      0
+    );
+    dispatch({ type: "SET_WEIGHT", payload: totalWeight ? totalWeight.toFixed(2) : "" });
+
+    dispatch({
+      type: "SET_INSTRUCTIONS",
+      payload: `Detected: ${prefilledItems.map((i) => `${i.quantity || 1}× ${i.type}`).join(", ")}`,
+    });
+  }, [prefilledItems]);
+
+  // Fetch user's pickup history
+  const fetchMyPickups = async () => {
+    if (!isLoggedin || !userData?.id) return setPickupHistory([]);
+    setLoading(true);
+    try {
+      const res = await axios.get(`${backendUrl}/api/pickups/my`, { withCredentials: true });
+      if (res.data?.success) {
+        setPickupHistory(res.data.pickups.slice(0, 3));
+      } else {
+        setPickupHistory([]);
+      }
+    } catch (err) {
+      console.error("Error fetching pickups:", err);
       setPickupHistory([]);
+    } finally {
       setLoading(false);
-      return;
     }
-        setLoading(true);
-        try {
-          const res = await api.get("/pickups/my");
-          if(res.data.success){
-            const lastThreePickups = res.data.pickups.slice(0, 3);
-            setPickupHistory(lastThreePickups);
-            console.log("Fetched user pickups:", res.data.pickups);
-          }else{
-            console.error("Failed to fetch user pickups:", res.data.message);
-            setPickupHistory([]);
-          }
-        } catch (error) {
-          console.error("Error fetching user pickups:", error);
-          setPickupHistory([]);
-        } finally {
-          setLoading(false);
-        }
-}
+  };
 
-  // Function to add a new pickup request
+  useEffect(() => {
+    if (isLoggedin && userData?.id && !loadingUser) fetchMyPickups();
+    else setPickupHistory([]);
+  }, [isLoggedin, userData?.id, loadingUser]);
+
+  // Submit pickup (supports AI-prefilled items and manual simple-material -> convert to objects)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmited(true);
-    
-    // Validation first
-    if (!state.scheduled_date || !state.time_slot || !state.address || state.material.length === 0 || !state.weight) {
+
+    if (
+      !state.scheduled_date ||
+      !state.time_slot ||
+      !state.address ||
+      (state.material.length === 0 && prefilledItems.length === 0) ||
+      !state.weight
+    ) {
       setSubmited(false);
       return;
     }
-    
-    // Log authentication status
-    if (!isLoggedin || !userData?._id) {
-      console.warn("User not fully authenticated, using fallback user ID for testing");
-      console.log("Auth state details:", { isLoggedin, userData, loadingUser });
-    }
 
-    // Create pickup data
+    // Build items payload (B: objects expected by backend)
+    const itemsData = prefilledItems.length
+      ? prefilledItems.map((item) => ({
+          type: item.type,
+          quantity: item.quantity || 1,
+          weight: item.baseWeight || item.weight || 0,
+          points: item.points || 0,
+          estimatedValue: item.estimatedValue || 0,
+        }))
+      : state.material.map((type) => ({ type, quantity: 1 }));
+
+    const pickupData = {
+      address: state.address,
+      items: itemsData,
+      weight: parseFloat(state.weight),
+      instructions: state.instructions,
+      pickupTime: new Date(state.scheduled_date),
+      time_slot: state.time_slot,
+    };
+
     try {
-const pickupData = {
-  address: state.address,
-  items: state.material, 
-  weight: parseInt(state.weight),
-  instructions: state.instructions,
-  pickupTime: new Date(state.scheduled_date), 
-  time_slot: state.time_slot,
-};
-      
-   let res;
-   if(editingPickupId){
-    res = await api.put(`/pickups/${editingPickupId}`, pickupData);
-    console.log("Pickup updated successfully:", res.data);
-    setEditingPickupId(null);
-   }
-      const response = await api.post("/pickups", pickupData);
-      
-      console.log("Pickup scheduled successfully:", response.data);
-     setSuccess(true)
-     setTimeout(() => setSuccess(false), 3000); // Hide success message after 3 seconds
-      fetchMyPickups(); // Refresh pickup history
-      dispatch({type: "RESET_FORM"}); //Rest form
-    } catch (error) {
-      console.error("Error scheduling pickup:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-      setSuccess(false);
+      // If editing, call PUT
+      if (editingPickupId) {
+        await axios.put(`${backendUrl}/api/pickups/${editingPickupId}`, pickupData, { withCredentials: true });
+        setEditingPickupId(null);
+      } else {
+        await axios.post(`${backendUrl}/api/pickups`, pickupData, { withCredentials: true });
+      }
+
+      // If items were prefilling from AI, reward points & log activities
+      if (prefilledItems.length) {
+        const activities = prefilledItems.map((item) => ({
+          action: `Recycled ${item.quantity || 1}× ${item.type}`,
+          points: item.points || 0,
+          date: new Date(),
+        }));
+
+        try {
+          await axios.post(
+            `${backendUrl}/api/auth/add-activity`,
+            { activities },
+            { withCredentials: true }
+          );
+          // refresh user data to reflect points
+          if (typeof refreshUserData === "function") await refreshUserData();
+        } catch (err) {
+          console.warn("Failed to add activities after pickup:", err);
+        }
+      }
+
+      fetchMyPickups();
+      dispatch({ type: "RESET_FORM" });
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      console.error("Error creating/updating pickup:", err);
     } finally {
       setSubmited(false);
     }
   };
 
-  // Load centers and pickup history when component mounts
-  useEffect(() => {
-    if (isLoggedin && userData?.id && !loadingUser) {
-      fetchMyPickups()
-    } else {
-setPickupHistory([]);
+  // Remove pickup from list locally (called by ReqHistoryCard after successful delete)
+  const handleDeletePickup = (pickupId) => {
+    console.log("🗑️ Removing pickup from list:", pickupId);
+    setPickupHistory((prev) => prev.filter((p) => p._id !== pickupId));
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 3000);
+  };
+
+  // Populate form for editing
+  const handleUpdatePickup = (pickupData) => {
+    // pickupData expected to include: address, weight, time_slot, pickupTime, items, _id
+    dispatch({ type: "SET_ADDRESS", payload: pickupData.address || "" });
+    dispatch({ type: "SET_WEIGHT", payload: pickupData.weight || "" });
+    dispatch({ type: "SET_TIME", payload: pickupData.time_slot || "" });
+
+    if (pickupData.pickupTime) {
+      const isoDate = new Date(pickupData.pickupTime).toISOString().split("T")[0];
+      dispatch({ type: "SET_DATE", payload: isoDate });
     }
-  }, [isLoggedin, userData?.id, loadingUser]);
 
+    // set materials from items array
+    if (Array.isArray(pickupData.items)) {
+      // reset materials first
+      dispatch({ type: "RESET_FORM" });
+      pickupData.items.forEach((item) => {
+        const material = (item.type || item.category || item).toLowerCase();
+        dispatch({ type: "SET_MATERIAL", payload: material });
+      });
+    }
 
-  //Function to delete a pickup from history after deletion
-const handleDeletePickup = (pickupId) => {
-  console.log("🗑️ Removing pickup from list:", pickupId);
-  setPickupHistory(prev => prev.filter(p => p._id !== pickupId));
-  setSuccess(true);
-  setTimeout(() => setSuccess(false), 3000);
-};
+    dispatch({ type: "SET_INSTRUCTIONS", payload: pickupData.instructions || "" });
 
-  //Function to edite a pickup - populate form with existing data
-const handleUpdatePickup = (pickupData) => {
-  console.log("Updating pickup:", pickupData);
-  // Populate form with existing data
-  dispatch({ type: "SET_ADDRESS", payload: pickupData.address });
-  dispatch({ type: "SET_WEIGHT", payload: pickupData.weight });
-  dispatch({ type: "SET_TIME", payload: pickupData.time_slot });
-  dispatch({ type: "SET_DATE", payload: new Date(pickupData.pickupTime).toISOString().split('T')[0] });
-  
-  // Set materials
-  if (Array.isArray(pickupData.items)) {
-    pickupData.items.forEach(item => {
-      const material = (item.category || item).toLowerCase();
-      dispatch({ type: "SET_MATERIAL", payload: material });
-    });
-  }
-  
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  setEditingPickupId(pickupData.id);
-};
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setEditingPickupId(pickupData._id || pickupData.id || null);
+  };
 
-
+  if (loadingUser) return <LoadingSpinner />;
 
   return (
     <section id="pickup" className="mb-10 min-h-screen bg-gray-100 ">
       <div className="flex flex-col gap-2 px-10 mt-10 md:flex-row">
-        <div className="bg-white border-none rounded-2xl text-gray-500 p-4">
+        <div className="bg-white border-none rounded-2xl text-gray-500 p-4 flex-1">
           <div className="flex items-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -231,11 +267,11 @@ const handleUpdatePickup = (pickupData) => {
             </div>
           )}
 
-{/* Form */}
+          {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-5 mt-4 shadow-xl px-5 rounded-[20px] py-5 w-full">
             {/* Date + Time */}
             <div className="flex gap-5 flex-col md:flex-row">
-              <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-col items-start gap-2 flex-1">
                 <label htmlFor="date" className="text-black">
                   Preferred Date
                 </label>
@@ -243,13 +279,13 @@ const handleUpdatePickup = (pickupData) => {
                   type="date"
                   id="date"
                   required
-                  value={state.scheduled_date || " "}
-                  onChange={(e) => dispatch({type: "SET_DATE", payload: e.target.value})}
-                  className="border-none rounded-xl p-2 bg-gray-100 text-gray-500 focus:outline-none focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100"
+                  value={state.scheduled_date || ""}
+                  onChange={(e) => dispatch({ type: "SET_DATE", payload: e.target.value })}
+                  className="border-2 border-transparent  rounded-xl p-2 bg-gray-100 text-gray-500 focus:outline-none focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100 w-full"
                 />
               </div>
 
-              <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-col items-start gap-2 flex-1">
                 <label htmlFor="time" className="text-black">
                   Time Slot
                 </label>
@@ -258,8 +294,8 @@ const handleUpdatePickup = (pickupData) => {
                   name="time"
                   required
                   value={state.time_slot || ""}
-                  onChange={(e) => dispatch({type: "SET_TIME", payload: e.target.value})}
-                  className="border-none rounded-xl p-2 bg-gray-100 text-gray-500 focus:outline-none focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100"
+                  onChange={(e) => dispatch({ type: "SET_TIME", payload: e.target.value })}
+                  className="border-2 border-transparent rounded-xl p-2 bg-gray-100 text-gray-500 focus:outline-none  focus:border-2 focus:border-solid focus:border-black transtion duration-100 w-full"
                 >
                   <option value="" disabled>
                     Select time slot
@@ -270,8 +306,6 @@ const handleUpdatePickup = (pickupData) => {
                 </select>
               </div>
             </div>
-
-
 
             {/* Address */}
             <div className="flex flex-col items-start gap-2">
@@ -284,8 +318,8 @@ const handleUpdatePickup = (pickupData) => {
                 placeholder="Enter your pickup address"
                 required
                 value={state.address}
-                onChange={(e) => dispatch({type: "SET_ADDRESS", payload: e.target.value})}
-                className="border-none rounded-xl p-2 bg-gray-100 focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100 text-gray-500 w-[95%] focus:outline-none"
+                onChange={(e) => dispatch({ type: "SET_ADDRESS", payload: e.target.value })}
+                className="border-2 border-transparent  rounded-xl p-2 bg-gray-100  focus:border-2 focus:border-solid focus:border-black transtion duration-100 text-gray-500 w-full focus:outline-none"
               />
             </div>
 
@@ -304,7 +338,7 @@ const handleUpdatePickup = (pickupData) => {
                         id={item}
                         value={item}
                         checked={state.material.includes(item)}
-                        onChange={(e) => dispatch({type: "SET_MATERIAL", payload: e.target.value})}
+                        onChange={(e) => dispatch({ type: "SET_MATERIAL", payload: e.target.value })}
                         className="accent-gray-800"
                       />
                       <label htmlFor={item} className="text-black ml-1 capitalize">
@@ -322,7 +356,7 @@ const handleUpdatePickup = (pickupData) => {
                         id={item}
                         value={item}
                         checked={state.material.includes(item)}
-                        onChange={(e) =>dispatch({type: "SET_MATERIAL", payload: e.target.value})}
+                        onChange={(e) => dispatch({ type: "SET_MATERIAL", payload: e.target.value })}
                         className="accent-gray-800"
                       />
                       <label htmlFor={item} className="text-black ml-1 capitalize">
@@ -343,11 +377,11 @@ const handleUpdatePickup = (pickupData) => {
                 type="number"
                 id="weight"
                 placeholder="e.g. 5"
-                min={'1'}
+                min={1}
                 required
                 value={state.weight || ""}
-                onChange={(e) => dispatch({type: "SET_WEIGHT", payload: e.target.value})}
-                className="border-none rounded-xl p-2 bg-gray-100 text-gray-500 w-[95%] focus:outline-none focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100"
+                onChange={(e) => dispatch({ type: "SET_WEIGHT", payload: e.target.value })}
+                className="border-2 border-transparent  rounded-xl p-2 bg-gray-100 text-gray-500 w-full focus:outline-none focus:border-2 focus:border-solid focus:border-black transtion duration-100"
               />
             </div>
 
@@ -360,8 +394,8 @@ const handleUpdatePickup = (pickupData) => {
                 id="instructions"
                 placeholder="Any special instructions for pickup"
                 value={state.instructions}
-                onChange={(e) => dispatch({type: "SET_INSTRUCTIONS", payload: e.target.value})}
-                className="border-2 border-black rounded-2xl p-2 w-[95%] h-16 bg-transparent focus:border focus:border-2 focus:border-solid focus:border-black transtion duration-100"
+                onChange={(e) => dispatch({ type: "SET_INSTRUCTIONS", payload: e.target.value })}
+                className="border-2 border-black rounded-2xl p-2 w-full h-16 bg-transparent focus:border-2 focus:border-solid focus:border-black transtion duration-100"
               ></textarea>
             </div>
 
@@ -399,38 +433,33 @@ const handleUpdatePickup = (pickupData) => {
               type="submit"
               disabled={submited}
               className={`w-[95%] mt-2 flex items-center justify-center gap-2 rounded-full p-3 transition-all ${
-                submited 
-                  ? 'bg-green-600 text-white cursor-wait' 
-                  : 'bg-green-700 text-white hover:bg-green-800'
+                submited ? "bg-green-600 text-white cursor-wait" : "bg-green-700 text-white hover:bg-green-800"
               }`}
             >
-              <Truck className="mr-1" /> 
-              {submited ? (editingPickupId? 'Updating...' :'Scheduling...' ): (editingPickupId? 'Update' :'Schedule Pickup') }
+              <Truck className="mr-1" />
+              {submited ? (editingPickupId ? "Updating..." : "Scheduling...") : editingPickupId ? "Update" : "Schedule Pickup"}
             </button>
           </form>
-        {success && (
-          <div className="mt-4 p-4 bg-[rgba(0,0,0,0.2)]  border border-green-200 rounded-lg text-green-800">
-            Pickup scheduled successfully! wait for confirmation.
-          </div>
-        )}
+
+          {success && (
+            <div className="mt-4 p-4 bg-[rgba(0,0,0,0.2)]  border border-green-200 rounded-lg text-green-800">
+              Pickup scheduled successfully! wait for confirmation.
+            </div>
+          )}
         </div>
 
         {/* Pickup History */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5 w-full md:w-[35%]">
           <div className="bg-white rounded-2xl p-4 shadow-xl px-5">
             <div className="text-start mb-4">
               <h3 className="text-black font-semibold">My Pickup History</h3>
               {isLoggedin && userData ? (
-                <p className="text-gray-500">
-                  Your recent pickup requests and their status
-                </p>
+                <p className="text-gray-500">Your recent pickup requests and their status</p>
               ) : (
-                <p className="text-gray-500">
-                  Please log in to view your pickup history
-                </p>
+                <p className="text-gray-500">Please log in to view your pickup history</p>
               )}
             </div>
-            
+
             <div className="space-y-3">
               {loadingUser ? (
                 <div className="text-center py-4">
@@ -451,29 +480,25 @@ const handleUpdatePickup = (pickupData) => {
                   <LoadingSpinner />
                 </div>
               ) : pickupHistory.length > 0 ? (
-                <>
-                 
-                 {pickupHistory.map((pickup) => (
-  <ReqHistoryCard
-    key={pickup._id}
-    date={new Date(pickup.createdAt).toLocaleDateString("en-EG", {
-      timeZone: "Africa/Cairo",
-    })}
-    material={Array.isArray(pickup.items) 
-      ? pickup.items.map(item => item.category || item).join(", ")
-      : pickup.items}
-    items={pickup.items}
-    time={pickup.time_slot}
-    status={pickup.status}
-    address={pickup.address}
-    weight={pickup.weight}
-    scheduledDate={new Date(pickup.pickupTime).toLocaleDateString()}
-    requestId={pickup._id}
-    onDelete={handleDeletePickup}
-    onUpdate={handleUpdatePickup}
-  />
-))}
-                </>
+                pickupHistory.map((pickup) => (
+                  <ReqHistoryCard
+                    key={pickup._id}
+                    date={new Date(pickup.createdAt).toLocaleDateString("en-EG", { timeZone: "Africa/Cairo" })}
+                    material={Array.isArray(pickup.items) ? pickup.items.map((i) => i.type || i).join(", ") : pickup.items}
+                    items={pickup.items}
+                    time={pickup.time_slot}
+                    status={pickup.status}
+                    address={pickup.address}
+                    weight={pickup.weight}
+                    scheduledDate={new Date(pickup.pickupTime).toLocaleDateString()}
+                    requestId={pickup._id}
+                    onDelete={handleDeletePickup}
+                    onUpdate={handleUpdatePickup}
+                    refreshHistory={fetchMyPickups}
+                    backendUrl={backendUrl}
+                    agentName={pickup.deliveryAgentId?.name || ""}
+                  />
+                ))
               ) : (
                 <div className="text-center py-8">
                   <div className="mb-4">
@@ -486,13 +511,10 @@ const handleUpdatePickup = (pickupData) => {
                 </div>
               )}
             </div>
-            
+
             {isLoggedin && pickupHistory.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <button
-                  onClick={fetchMyPickups}
-                  className="text-green-700 hover:text-green-800 text-sm font-medium transition-colors"
-                >
+                <button onClick={fetchMyPickups} className="text-green-700 hover:text-green-800 text-sm font-medium transition-colors">
                   Refresh History
                 </button>
               </div>
@@ -526,6 +548,6 @@ const handleUpdatePickup = (pickupData) => {
       </div>
     </section>
   );
- };
+};
 
 export default PickupPage;

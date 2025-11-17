@@ -21,10 +21,11 @@ import Awarencenotrecycle from "./pages/Awarencenotrecycle";
 import FactsStats from "./pages/FactsStats";
 
 import Profile from "./pages/Profile";
-
+import ScrollToTop from "./components/ScrollToTop";
 const App = () => {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AutoRedirect />
       <ToastContainer
         position="top-right"

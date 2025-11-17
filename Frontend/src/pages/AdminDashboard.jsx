@@ -1,37 +1,18 @@
 import React, { useEffect, useState, useMemo } from "react";
 import NavBar from "../components/NavBar.jsx";
+
 const API_URL = "http://localhost:5000/api";
 
 export default function AdminDashboard() {
   const [pickups, setPickups] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [openAssign, setOpenAssign] = useState(false);
   const [activePickup, setActivePickup] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const [agents, setAgents] = useState([]);
-
-const fetchAgents = async () => {
-  try {
-    const res = await fetch(`${API_URL}/delivery-agents`, {
-      headers: getAuthHeaders(),
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.success) {
-      setAgents(data.agents || []);
-    } else {
-      console.error("Error fetching agents:", data.message);
-    }
-  } catch (err) {
-    console.error("Fetch agents error:", err);
-  }
-};
-
-  // ✅ Fetch pickups and users
   useEffect(() => {
     fetchPickups();
-    fetchUsers();
     fetchAgents();
   }, []);
 
@@ -50,44 +31,26 @@ const fetchAgents = async () => {
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) {
-        setPickups(data.pickups || []);
-      } else if (data.message?.includes("token")) {
-        handleAuthError();
-      } else {
-        console.error("Error fetching pickups:", data.message);
-      }
+      if (data.success) setPickups(data.pickups || []);
     } catch (err) {
       console.error("Fetch pickups error:", err);
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchAgents = async () => {
     try {
-      const res = await fetch(`${API_URL}/users`, {
+      const res = await fetch(`${API_URL}/delivery-agents`, {
         headers: getAuthHeaders(),
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) {
-        setUsers(data.users || []);
-      } else if (data.message?.includes("token")) {
-        handleAuthError();
-      } else {
-        console.error("Error fetching users:", data.message);
-      }
+      if (data.success) setAgents(data.agents || []);
     } catch (err) {
-      console.error("Fetch users error:", err);
+      console.error("Fetch agents error:", err);
     }
   };
 
-  const handleAuthError = () => {
-    alert("Session expired. Please log in again.");
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  };
-
-  // ✅ Open assign modal
+  // Open modal for assigning pickup
   const openAssignModal = (pickup) => {
     setActivePickup({
       ...pickup,
@@ -101,12 +64,9 @@ const fetchAgents = async () => {
     setOpenAssign(true);
   };
 
-  // ✅ Assign pickup
+  // Assign pickup to agent
   const handleAssign = async () => {
-    if (!activePickup?._id) return;
-    if (!activePickup.deliveryAgentId) {
-      return alert("Please select a delivery agent!");
-    }
+    if (!activePickup.deliveryAgentId) return alert("Select agent");
 
     try {
       const res = await fetch(`${API_URL}/pickups/${activePickup._id}/assign`, {
@@ -119,18 +79,31 @@ const fetchAgents = async () => {
         }),
       });
       const data = await res.json();
+
       if (data.success) {
+        // Update the pickup in state directly
+        setPickups((prev) =>
+          prev.map((p) =>
+            p._id === activePickup._id
+              ? {
+                  ...p,
+                  deliveryAgentId: agents.find(
+                    (a) => a._id === activePickup.deliveryAgentId
+                  ),
+                  pickupTime: selectedDate,
+                  status: "assigned",
+                }
+              : p
+          )
+        );
         setOpenAssign(false);
-        fetchPickups();
-      } else {
-        alert(data.message);
-      }
+      } else alert(data.message);
     } catch (err) {
       console.error("Assign pickup error:", err);
     }
   };
 
-  // ✅ Mark pickup completed
+  // Mark pickup as completed
   const handleComplete = async (id) => {
     try {
       const res = await fetch(`${API_URL}/pickups/${id}/complete`, {
@@ -139,14 +112,19 @@ const fetchAgents = async () => {
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) fetchPickups();
-      else alert(data.message);
+      if (data.success) {
+        setPickups((prev) =>
+          prev.map((p) =>
+            p._id === id ? { ...p, status: "completed" } : p
+          )
+        );
+      } else alert(data.message);
     } catch (err) {
       console.error("Complete pickup error:", err);
     }
   };
 
-  // ✅ Compute stats
+  // Stats
   const stats = useMemo(() => {
     const total = pickups.length;
     const pending = pickups.filter((p) => p.status === "pending").length;
@@ -154,6 +132,17 @@ const fetchAgents = async () => {
     const completed = pickups.filter((p) => p.status === "completed").length;
     return { total, pending, assigned, completed };
   }, [pickups]);
+
+  // Filtered pickups, sorted by most recent first
+  const filteredPickups = useMemo(() => {
+    let filtered = pickups;
+    if (statusFilter !== "all") {
+      filtered = pickups.filter((p) => p.status === statusFilter);
+    }
+    return filtered.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+  }, [pickups, statusFilter]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -168,7 +157,22 @@ const fetchAgents = async () => {
         <StatCard title="Completed" value={stats.completed} />
       </div>
 
-      {/* Table */}
+      {/* Filter */}
+      <div className="m-6 mb-3 flex items-center gap-4">
+        <label className="text-sm font-medium">Filter by status:</label>
+        <select
+          className="border p-2 rounded"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="assigned">Assigned</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+
+      {/* Pickup Table */}
       <div className="bg-white rounded-2xl shadow-sm p-4 m-6">
         <h2 className="text-lg font-medium mb-3">Pickup Requests</h2>
         <div className="overflow-x-auto">
@@ -176,8 +180,7 @@ const fetchAgents = async () => {
             <thead>
               <tr className="text-left border-b">
                 <th className="p-2">User</th>
-                <th className="p-2">Center</th>
-                <th className="p-2">Assigned To</th>
+                <th className="p-2">Assigned Agent</th>
                 <th className="p-2">Status</th>
                 <th className="p-2">Pickup Time</th>
                 <th className="p-2">Created At</th>
@@ -185,15 +188,10 @@ const fetchAgents = async () => {
               </tr>
             </thead>
             <tbody>
-              {pickups.map((p) => (
+              {filteredPickups.map((p) => (
                 <tr key={p._id} className="border-b">
                   <td className="p-2">
                     {p.userId ? `${p.userId.name} (${p.userId.email})` : "—"}
-                  </td>
-                  <td className="p-2">
-                    {p.centerId
-                      ? `${p.centerId.name} (${p.centerId.location})`
-                      : "—"}
                   </td>
                   <td className="p-2">
                     {p.deliveryAgentId
@@ -213,7 +211,7 @@ const fetchAgents = async () => {
                     {p.status === "pending" && (
                       <button
                         onClick={() => openAssignModal(p)}
-                        className="px-3 py-1 bg-blue-600 text-white rounded  cursor-pointer"
+                        className="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer"
                       >
                         Assign
                       </button>
@@ -249,7 +247,6 @@ const fetchAgents = async () => {
               Assign Pickup for {activePickup.userId?.name || "Unknown User"}
             </h3>
 
-            {/* Select Delivery Agent */}
             <label className="block text-sm text-gray-600 mb-2">
               Assign To (Delivery Agent):
             </label>
@@ -271,7 +268,6 @@ const fetchAgents = async () => {
               ))}
             </select>
 
-            {/* Select Pickup Date & Time */}
             <label className="block text-sm text-gray-600 mb-2">
               Scheduled Date & Time:
             </label>

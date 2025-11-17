@@ -1,46 +1,23 @@
-//imports the hooks and axios as connect point between front and back
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState, useContext } from "react";
+import { AppContent } from "../context/AppContext";
 import { CiDiscount1 } from "react-icons/ci";
 import { FaHeart } from "react-icons/fa";
 import { FaGifts } from "react-icons/fa6";
 import { PiPlantFill } from "react-icons/pi";
 import { FaMedal } from "react-icons/fa6";
 import { FaFire } from "react-icons/fa";
-import LoadingSpinner from "../components/LoadingSpinner";
 
-// start of the component
-// first one resposible for change between the tabs of recent activity w rewards w achievement
 const ProfileTabs = () => {
+  const { userData } = useContext(AppContent); // reactive context
   const [activeTab, setActiveTab] = useState("activity");
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
- // send request to back to make user data appear in front
- // finally mean that profile page has already loaded so set the loading state to be false
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/auth/profile", {
-          withCredentials: true,
-        });
-        if (res.data.success) setUser(res.data.userData);
-      } catch (err) {
-        console.error("Error fetching profile:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, []);
 
- //ternary operator to check if there is user in database or not if user has been found check if has any activities befor and points
-//if not found any activity done return default value
-//act ask
-
-  const activities = user?.activity?.length
-    ? user.activity.map((act) => ({
+  // -----------------------
+  // DATA SETUP
+  // -----------------------
+  const activities = userData?.activity?.length
+    ? userData.activity.map((act) => ({
         ...act,
-        points: act.Points !== undefined ? act.Points : 0,
+        Points: act.Points !== undefined ? act.Points : 0,
       }))
     : [];
 
@@ -83,21 +60,17 @@ const ProfileTabs = () => {
   const greenMessage = (
     <div className="mt-6 bg-green-200 text-green-900 text-sm font-medium p-4 rounded-lg text-center">
       <b>Great Job this week!</b> You are on a{" "}
-      {user?.stats?.thisWeek || 0}-day recycling streak!
+      {userData?.stats?.thisWeek || 0}-day recycling streak!
       <br />
       Keep it up — you’re only{" "}
-      <b>{5000 - (user?.points || 0)} points</b> away from reaching the next
+      <b>{5000 - (userData?.points || 0)} points</b> away from reaching the next
       level!
     </div>
   );
-  // first div style of profiletab card
-// second resposible to make tab be resposive
-//     {["activity", "rewards", "achievements"].map((tab) used to make 3 buttons on tab and each bitton take one of this words
-// .map to alletrate on tab 3 times each alterate give name for one of the buttons
 
   return (
     <div className="mt-10 bg-white rounded-4xl shadow-md p-4 sm:p-6">
-      {/* ==== Tab Bar (Same style as Awareness) ==== */}
+      {/* ==== Tab Bar ==== */}
       <div className="bg-gray-200 rounded-4xl p-1 flex justify-between">
         {[
           { key: "activity", label: "Recent Activity" },
@@ -155,7 +128,9 @@ const ProfileTabs = () => {
 
         {activeTab === "rewards" && (
           <>
-            <h3 className="text-gray-800 font-semibold mb-4">Redeem your points for amazing rewards</h3>
+            <h3 className="text-gray-800 font-semibold mb-4">
+              Redeem your points for amazing rewards
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {rewards.map((reward, i) => (
                 <div

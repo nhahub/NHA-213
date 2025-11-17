@@ -11,37 +11,88 @@ const RecycleCamera = () => {
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const recyclableTypes = [
-    "Plastic",
-    "Aluminum Can",
-    "Glass",
-    "Cardboard",
-    "Paper",
-    "Metal",
-    "Wood",
-    "Cloth",
-  ];
+  // ---- AI API function ----
+  // const sendToAI = async (imageSrc) => {
+  //   try {
+  //     setLoading(true);
+  //     setError("");
 
-  const getRandomType = () =>
-    recyclableTypes[Math.floor(Math.random() * recyclableTypes.length)];
+  //     const formData = new FormData();
+  //     // Convert Base64 to blob if imageSrc is a base64 string
+  //     const blob = await (await fetch(imageSrc)).blob();
+  //     formData.append("image", blob, "recyclable.jpg");
 
-  // Capture from webcam
-  const capturePhoto = () => {
+  //     const response = await fetch("https://your-ai-api.com/detect", {
+  //       method: "POST",
+  //       body: formData,
+  //       // headers: { Authorization: `Bearer ${API_KEY}` } // if needed
+  //     });
+
+  //     const data = await response.json();
+
+  //     // Expected data: { type, weight, points, estimatedValue }
+  //     if (!data || !data.type) {
+  //       throw new Error("AI detection failed");
+  //     }
+
+  //     return data;
+  //   } catch (err) {
+  //     console.error(err);
+  //     setError("Failed to detect item. Please try again.");
+  //     return null;
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+  // ---- AI API function (MOCKED) ----
+const sendToAI = async (imageSrc) => {
+  try {
+    setLoading(true);
+    setError("");
+
+    // 🟢 MOCKED RESPONSE FOR NOW
+    await new Promise((res) => setTimeout(res, 800)); // simulate delay
+
+    const mockTypes = ["plastic", "glass", "paper", "metal", "cardboard"];
+    const type = mockTypes[Math.floor(Math.random() * mockTypes.length)];
+
+    return {
+      type,
+      weight: Number((Math.random() * 2 + 0.2).toFixed(2)), // 0.2–2.2 kg
+      points: Math.floor(Math.random() * 40 + 10), // 10–50 pts
+      estimatedValue: Number((Math.random() * 5 + 1).toFixed(2)),
+    };
+
+  } catch (err) {
+    console.error(err);
+    setError("Failed to detect item. Please try again.");
+    return null;
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  // ---- Capture photo ----
+  const capturePhoto = async () => {
     const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
 
-    const baseWeight = parseFloat((Math.random() * 2 + 0.5).toFixed(2)); // base weight in kg
-    const basePoints = Math.floor(Math.random() * 50) + 10;
+    const aiResult = await sendToAI(imageSrc);
+    if (!aiResult) return;
 
     const newPhoto = {
       id: Date.now(),
       src: imageSrc,
-      type: getRandomType(),
-      baseWeight,
-      basePoints,
-      weight: `${baseWeight.toFixed(2)} kg`,
-      points: basePoints,
-      estimatedValue: `$${(Math.random() * 5 + 1).toFixed(2)}`,
+      type: aiResult.type,
+      baseWeight: aiResult.weight,
+      basePoints: aiResult.points,
+      weight: `${Math.round(aiResult.weight)} kg`,
+      points: aiResult.points,
+      estimatedValue: `$${aiResult.estimatedValue.toFixed(2)}`,
       quantity: 1,
     };
 
@@ -49,39 +100,38 @@ const RecycleCamera = () => {
     setIsCameraOpen(false);
   };
 
-  // Upload file
+  // ---- Upload file ----
   const handleButtonClick = () => fileInputRef.current.click();
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      const imageURL = URL.createObjectURL(file);
+    if (!file) return;
 
-      const baseWeight = parseFloat((Math.random() * 2 + 0.5).toFixed(2));
-      const basePoints = Math.floor(Math.random() * 50) + 10;
+    const imageURL = URL.createObjectURL(file);
+    const aiResult = await sendToAI(imageURL);
+    if (!aiResult) return;
 
-      const newPhoto = {
-        id: Date.now(),
-        src: imageURL,
-        type: getRandomType(),
-        baseWeight,
-        basePoints,
-        weight: `${baseWeight.toFixed(2)} kg`,
-        points: basePoints,
-        estimatedValue: `$${(Math.random() * 5 + 1).toFixed(2)}`,
-        quantity: 1,
-      };
+    const newPhoto = {
+      id: Date.now(),
+      src: imageURL,
+      type: aiResult.type,
+      baseWeight: aiResult.weight,
+      basePoints: aiResult.points,
+      weight: `${Math.round(aiResult.weight)} kg`,
+      points: aiResult.points,
+      estimatedValue: `$${aiResult.estimatedValue.toFixed(2)}`,
+      quantity: 1,
+    };
 
-      setPhotos((prev) => [newPhoto, ...prev]);
-    }
+    setPhotos((prev) => [newPhoto, ...prev]);
   };
 
-  // Delete photo
+  // ---- Delete photo ----
   const deletePhoto = (id) => {
     setPhotos((prev) => prev.filter((photo) => photo.id !== id));
   };
 
-  // Update quantity for a specific photo
+  // ---- Update quantity ----
   const handleQuantityChange = (id, newQuantity) => {
     setPhotos((prev) =>
       prev.map((photo) => {
@@ -93,13 +143,19 @@ const RecycleCamera = () => {
           return {
             ...photo,
             quantity: updatedQty,
-            weight: `${updatedWeight.toFixed(2)} kg`,
+            weight: `${Math.round(updatedWeight)} kg`,
             points: updatedPoints,
           };
         }
         return photo;
       })
     );
+  };
+
+  // ---- Schedule Pickup ----
+  const handleSchedulePickup = () => {
+    // Pass all detected items to Pickup Form via state
+    navigate("/pickup", { state: { items: photos } });
   };
 
   return (
@@ -113,7 +169,7 @@ const RecycleCamera = () => {
         Scan or upload an image to identify recyclable materials
       </p>
 
-      {/* Placeholder or Live Camera */}
+      {/* Camera or Placeholder */}
       <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-400 rounded-xl p-6 min-h-[280px] transition-all">
         {isCameraOpen ? (
           <div className="flex flex-col items-center gap-3 w-full">
@@ -131,9 +187,11 @@ const RecycleCamera = () => {
             <button
               onClick={capturePhoto}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-medium"
+              disabled={loading}
             >
-              Capture Photo
+              {loading ? "Detecting..." : "Capture Photo"}
             </button>
+            {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
           </div>
         ) : (
           <>
@@ -197,9 +255,7 @@ const RecycleCamera = () => {
 
               {/* Description */}
               <div className="flex flex-col gap-2 text-gray-700 text-sm w-full">
-                <h3 className="font-semibold text-base mb-1">
-                  Detected Item Info
-                </h3>
+                <h3 className="font-semibold text-base mb-1">Detected Item Info</h3>
 
                 <div className="flex justify-between">
                   <span className="font-medium">Type of Object:</span>
@@ -235,23 +291,17 @@ const RecycleCamera = () => {
                   />
                 </div>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => navigate("/pickup")}
-                    className="bg-[#186933] hover:bg-[#124d26] text-white text-sm px-4 py-2 rounded-xl cursor-pointer"
-                  >
-                    Schedule Pickup
-                  </button>
-                  <button
-                    onClick={() => navigate("/pickup#centers")}
-                    className="border border-gray-400 hover:bg-gray-100 text-gray-700 text-sm px-4 py-2 rounded-xl cursor-pointer"
-                  >
-                    Show Centers
-                  </button>
-                </div>
               </div>
             </div>
           ))}
+                <div className="self-center">
+                  <button
+                    onClick={handleSchedulePickup}
+                    className="bg-[#186933] hover:bg-[#124d26] w-lg text-white  px-4 py-2 rounded-xl cursor-pointer"
+                  >
+                    Schedule Pickup
+                  </button>
+                </div>
         </div>
       )}
     </div>

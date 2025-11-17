@@ -61,7 +61,7 @@ import {
   updateProfile,
 } from "../controllers/authController.js";
 import authMiddleware from "../middleware/authMiddleware.js";
-
+import User from "../models/userModel.js"; // <-- ensure this import exists
 const router = express.Router();
 
 /* =====================================================
@@ -121,6 +121,28 @@ router.put(
   upload.single("profileImage"),
   updateProfile
 );
+/* =====================================================
+   ADD USER ACTIVITY (from AI detection or manual pickup)
+===================================================== */
+
+
+router.post("/add-activity", authMiddleware, async (req, res) => {
+  try {
+    const { activities } = req.body;
+
+    if (!activities || !Array.isArray(activities)) {
+      return res.status(400).json({ success: false, message: "Activities array required" });
+    }
+
+    await User.findByIdAndUpdate(req.user.id, {
+      $push: { activity: { $each: activities } }
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 export default router;
 
