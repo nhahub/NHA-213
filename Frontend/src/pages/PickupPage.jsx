@@ -186,7 +186,7 @@ const PickupPage = () => {
 
   // Remove pickup from list locally (called by ReqHistoryCard after successful delete)
   const handleDeletePickup = (pickupId) => {
-    console.log("🗑️ Removing pickup from list:", pickupId);
+    console.log(" Removing pickup from list:", pickupId);
     setPickupHistory((prev) => prev.filter((p) => p._id !== pickupId));
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
@@ -196,7 +196,7 @@ const PickupPage = () => {
   const handleUpdatePickup = (pickupData) => {
     // pickupData expected to include: address, weight, time_slot, pickupTime, items, _id
     dispatch({ type: "SET_ADDRESS", payload: pickupData.address || "" });
-    dispatch({ type: "SET_WEIGHT", payload: pickupData.weight || "" });
+    dispatch({ type: "SET_WEIGHT", payload: pickupData.weight || 0 });
     dispatch({ type: "SET_TIME", payload: pickupData.time_slot || "" });
 
     if (pickupData.pickupTime) {
@@ -379,7 +379,7 @@ const PickupPage = () => {
                 placeholder="e.g. 5"
                 min={1}
                 required
-                value={state.weight || ""}
+                value={state.weight|| 0}
                 onChange={(e) => dispatch({ type: "SET_WEIGHT", payload: e.target.value })}
                 className="border-2 border-transparent  rounded-xl p-2 bg-gray-100 text-gray-500 w-full focus:outline-none focus:border-2 focus:border-solid focus:border-black transtion duration-100"
               />
