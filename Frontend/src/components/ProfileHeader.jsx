@@ -15,6 +15,7 @@ const ProfileHeader = () => {
     level: "Beginner",
     daysRecycled: 0,
     points: 0,
+    Gains: 0,
   });
 
   useEffect(() => {
@@ -47,6 +48,7 @@ const ProfileHeader = () => {
             level: res.data.userData.level || "Beginner",
             daysRecycled: uniqueDays.size,
             points: totalPointsFromPickups,
+            Gains: totalPointsFromPickups*0.15, 
           });
         }
       } catch (error) {
@@ -100,6 +102,9 @@ const ProfileHeader = () => {
             </span>
             <span className="text-xs sm:text-sm font-semibold text-yellow-700 bg-yellow-100 px-3 py-1 rounded-full shadow-sm">
               Points: {formData.points}
+            </span>
+            <span className="text-xs sm:text-sm font-semibold text-yellow-700 bg-yellow-100 px-3 py-1 rounded-full shadow-sm">
+              Gains: {formData.Gains.toFixed(2)} EGP
             </span>
           </div>
         </div>
