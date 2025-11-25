@@ -10,19 +10,22 @@ const router = express.Router();
 // 🎯 POINTS CALCULATION HELPER FUNCTION
 const calculatePointsAndDistributeWeight = (items, totalWeight) => {
   const POINTS_PER_KG = {
-    Plastic: 10,
-    plastic: 10,
-    Paper: 8,
-    paper: 8,
-    Metal: 15,
-    metal: 15,
-    Glass: 6,
-    glass: 6,
+    Plastic: 167,
+    plastic: 167,
+    Paper: 53,
+    paper: 53,
+    Metal: 287,
+    metal: 287,
+    Glass: 23,
+    glass: 23,
     "E-Waste": 20,
     "e-waste": 20,
-    electronics: 20,
-    cardboard: 8,
-    Cardboard: 8,
+    electronics: 2000,
+    Electronics: 2000,
+    cardboard: 53,
+    Cardboard: 53,
+    clothes:117,
+    Clothes:117,
   };
   
   // Check if items already have weights
@@ -50,6 +53,11 @@ const calculatePointsAndDistributeWeight = (items, totalWeight) => {
     processedItems,
     totalPoints: Math.round(totalPoints) // Round to nearest integer
   };
+};
+
+//GAINS CALCULATION: 1 point = 0.15 EGP
+const calculateGains = (points) => {
+  return parseFloat((points * 0.15).toFixed(2));
 };
 
 // -----------------------------
@@ -96,8 +104,11 @@ router.post("/", authMiddleware, async (req, res) => {
       });
     }
 
-    //  CALCULATE POINTS AND DISTRIBUTE WEIGHT AUTOMATICALLY
+    // CALCULATE POINTS AND DISTRIBUTE WEIGHT AUTOMATICALLY
     const { processedItems, totalPoints } = calculatePointsAndDistributeWeight(items, weight);
+    
+    //  CALCULATE GAINS (1 point = 0.15 EGP)
+    const totalGains = calculateGains(totalPoints);
 
     const pickup = await Pickup.create({
       userId: req.userId,
@@ -107,16 +118,18 @@ router.post("/", authMiddleware, async (req, res) => {
       instructions,
       pickupTime: new Date(pickupTime),
       time_slot,
-      awardedPoints: totalPoints, 
+      awardedPoints: totalPoints,
+      gains: totalGains, 
     });
 
-    // 🔔 Emit event for admin dashboard
+    // Emit event for admin dashboard
     io.emit("new-pickup", pickup);
 
     res.status(201).json({ 
       success: true, 
       pickup,
-      awardedPoints: totalPoints
+      awardedPoints: totalPoints,
+      gains: totalGains // Return gains in response
     });
   } catch (error) {
     console.error("Error creating pickup:", error);
@@ -143,7 +156,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 
     await Pickup.findByIdAndDelete(id);
 
-    // 🔔 Emit event for admin dashboard
+    // 📢 Emit event for admin dashboard
     io.emit("delete-pickup", id);
 
     res.json({ success: true, message: "Pickup deleted successfully" });
@@ -159,7 +172,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { address, items, weight, instructions, pickupTime, time_slot } = req.body;
+    const { address, items, weight, instructions, pickupTime, time_slot, awardedPoints, gains } = req.body;
 
     const pickup = await Pickup.findById(id);
     if (!pickup) return res.status(404).json({ success: false, message: "Pickup not found" });
@@ -178,7 +191,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
     if (pickupTime) pickup.pickupTime = new Date(pickupTime);
     if (time_slot) pickup.time_slot = time_slot;
 
-    // ✅ RECALCULATE POINTS if items or weight changed
+    // ✅ RECALCULATE POINTS AND GAINS if items or weight changed
     if (items || weight) {
       const updatedItems = items || pickup.items;
       const updatedWeight = weight || pickup.weight;
@@ -188,21 +201,25 @@ router.put("/:id", authMiddleware, async (req, res) => {
         updatedWeight
       );
       
+      const totalGains = calculateGains(totalPoints);
+      
       pickup.items = processedItems;
       pickup.weight = updatedWeight;
       pickup.awardedPoints = totalPoints;
+      pickup.gains = totalGains; // ✅ Update gains
     }
 
     await pickup.save();
 
-    // 🔔 Emit event for admin dashboard
+    // 📢 Emit event for admin dashboard
     io.emit("update-pickup", pickup);
 
     res.json({ 
       success: true, 
       pickup, 
       message: "Pickup updated successfully",
-      awardedPoints: pickup.awardedPoints // ✅ Return updated points
+      awardedPoints: pickup.awardedPoints,
+      gains: pickup.gains // ✅ Return updated gains
     });
   } catch (error) {
     console.error("Error updating pickup:", error);
@@ -226,7 +243,7 @@ router.put("/:id/assign", authMiddleware, roleAuth("admin"), async (req, res) =>
     pickup.status = "assigned";
     await pickup.save();
 
-    // 🔔 Emit event for admin dashboard
+    // 📢 Emit event for admin dashboard
     io.emit("update-pickup", pickup);
 
     res.json({ success: true, pickup });
@@ -253,40 +270,40 @@ router.put("/:id/complete", authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, message: "Already completed" });
     }
 
-    // ✅ Recalculate points one final time to ensure accuracy
+    // ✅ Recalculate points and gains one final time to ensure accuracy
     const { totalPoints } = calculatePointsAndDistributeWeight(pickup.items, pickup.weight);
+    const totalGains = calculateGains(totalPoints);
+    
     pickup.awardedPoints = totalPoints;
+    pickup.gains = totalGains; // ✅ Update gains
     pickup.status = "completed";
     await pickup.save();
 
-    // ✅ NOW update user points (only when completed, not when created)
+    // ✅ NOW update user points and gains (only when completed, not when created)
     await userModel.findByIdAndUpdate(pickup.userId, {
-      $inc: { points: totalPoints },
+      $inc: { 
+        points: totalPoints,
+        gains: totalGains // ✅ Update user's total gains
+      },
       $push: {
         activity: {
-          action: `Completed pickup worth ${totalPoints} points`,
+          action: `Completed pickup worth ${totalPoints} points (${totalGains} EGP)`,
           points: totalPoints,
+          gains: totalGains, // ✅ Store gains in activity
           date: new Date(),
         },
       },
     });
-  await userModel.findByIdAndUpdate(pickup.userId, {
-  $inc: { gains: totalPoints * 0.15 }, // ✅ تحديث الأرباح فقط
-  $push: {
-    activity: {
-      action: `Completed pickup worth ${totalPoints * 0.15} EGP`,
-      points: totalPoints, // ممكن تشيلي ده كمان لو مش عايزة تسجلي النقاط
-      date: new Date(),
-    },
-  },
-});
 
-
-
-    // 🔔 Emit event for admin dashboard
+    // 📢 Emit event for admin dashboard
     io.emit("update-pickup", pickup);
 
-    res.json({ success: true, pickup, awardedPoints: totalPoints });
+    res.json({ 
+      success: true, 
+      pickup, 
+      awardedPoints: totalPoints,
+      gains: totalGains // ✅ Return gains in response
+    });
   } catch (error) {
     console.error("Error completing pickup:", error);
     res.status(500).json({ success: false, message: error.message });

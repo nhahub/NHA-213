@@ -13,7 +13,9 @@ const ReqHistoryCard = ({
   requestId,
   items,
   onDelete,
-  onUpdate
+  onUpdate,
+  points,
+  gains
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isModifying, setIsModifying] = useState(false);
@@ -153,6 +155,12 @@ const ReqHistoryCard = ({
           )}
           {weight && (
             <p className="text-gray-500 text-xs">Weight: {weight} kg</p>
+          )}
+          {points && (
+            <p className="text-gray-500 text-xs">points: {points} pt</p>
+          )}
+          {gains && (
+            <p className="text-gray-500 text-xs">Earning: {gains} LE</p>
           )}
         </div>
 

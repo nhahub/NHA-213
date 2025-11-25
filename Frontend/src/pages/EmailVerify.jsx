@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef, useState} from "react";
 import { assets } from "../assets/assets";
 import { useNavigate } from "react-router-dom";
 import { AppContent } from "../context/AppContext";
@@ -11,6 +11,41 @@ const EmailVerify = () => {
     useContext(AppContent);
 
   const inputRefs = useRef([]);
+  const [canResend, setCanResend] = useState(false);
+const [timer, setTimer] = useState(45);
+
+useEffect(() => {
+  if (!canResend && timer > 0) {
+    const countdown = setInterval(() => {
+      setTimer((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(countdown);
+  }
+
+  if (timer === 0) {
+    setCanResend(true);
+  }
+}, [timer, canResend]);
+
+const handleResendOTP = async () => {
+  if (!canResend) return;
+
+  try {
+    // Change this line:
+    await axios.post(`${backendUrl}/api/auth/send-verify-otp`, {}, { withCredentials: true });
+
+    toast.success("A new OTP has been sent to your email");
+
+    // restart timer
+    setCanResend(false);
+    setTimer(45);
+
+  } catch (error) {
+    toast.error(error.response?.data?.message || "Failed to resend OTP");
+  }
+};
+
 
   // 👉 handle typing input
   const handleInput = (e, index) => {
@@ -112,7 +147,7 @@ const EmailVerify = () => {
 
       <form
         onSubmit={onSubmitHandler}
-        className="rounded-lg shadow-lg w-96 text-sm p-8 bg-white"
+        className="rounded-lg shadow-lg w-96 text-sm p-8 bg-green-50"
       >
         <h1 className="text-center text-2xl font-semibold mb-4">
           Verify Your Email
@@ -145,6 +180,19 @@ const EmailVerify = () => {
         >
           Verify Account
         </button>
+
+        <div className="text-center mt-4">
+  <button
+    type="button"
+    onClick={handleResendOTP}
+    disabled={!canResend}
+    className={`text-sm font-semibold ${
+      canResend ? "text-green-700 cursor-pointer" : "text-gray-400 cursor-not-allowed"
+    }`}
+  >
+    {canResend ? "Resend OTP" : `Resend OTP in ${timer}s`}
+  </button>
+</div>
       </form>
     </div>
   );

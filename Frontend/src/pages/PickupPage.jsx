@@ -15,6 +15,8 @@ const initState = {
   time_slot: null,
   created_at: new Date().toLocaleDateString("en-EG", {
     timeZone: "Africa/Cairo",
+    awardedPoints: 0,
+    gains: 0,
   }),
 };
 
@@ -47,6 +49,10 @@ const reducers = (state, action) => {
           timeZone: "Africa/Cairo",
         }),
       };
+      case "SET_PONTS":
+      return { ...state, awardedPoints: action.payload };
+      case "SET_GAINS":
+      return { ...state, gains: action.payload };
     default:
       return state;
   }
@@ -107,6 +113,58 @@ const PickupPage = () => {
     else setPickupHistory([]);
   }, [isLoggedin, userData?.id, loadingUser]);
 
+const calculatePointsAndDistributeWeight = (items, totalWeight) => {
+  const POINTS_PER_KG = {
+    Plastic: 167,
+    plastic: 167,
+    Paper: 53,
+    paper: 53,
+    Metal: 287,
+    metal: 287,
+    Glass: 23,
+    glass: 23,
+    "E-Waste": 20,
+    "e-waste": 20,
+    electronics: 2000,
+    Electronics: 2000,
+    cardboard: 53,
+    Cardboard: 53,
+    clothes:117,
+    Clothes:117,
+  };
+  
+  // Check if items already have weights
+  const totalItemWeight = items.reduce((sum, item) => sum + (item.weight || 0), 0);
+  const hasItemWeights = totalItemWeight > 0;
+  
+  let processedItems = [...items];
+  
+  // If items don't have individual weights, distribute total weight evenly
+  if (!hasItemWeights && totalWeight > 0) {
+    const weightPerItem = totalWeight / items.length;
+    processedItems = items.map(item => ({
+      ...item,
+      weight: weightPerItem
+    }));
+  }
+  
+  // Calculate total points
+  const totalPoints = processedItems.reduce((acc, item) => {
+    const perKg = POINTS_PER_KG[item.type] || 0;
+    return acc + perKg * (item.weight || 0);
+  }, 0);
+  
+  return {
+    processedItems,
+    totalPoints: Math.round(totalPoints) // Round to nearest integer
+  };
+};
+
+//GAINS CALCULATION: 1 point = 0.15 EGP
+const calculateGains = (points) => {
+  return parseFloat((points * 0.15).toFixed(2));
+};
+
   // Submit pickup (supports AI-prefilled items and manual simple-material -> convert to objects)
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -141,6 +199,8 @@ const PickupPage = () => {
       instructions: state.instructions,
       pickupTime: new Date(state.scheduled_date),
       time_slot: state.time_slot,
+      awardedPoints: calculatePointsAndDistributeWeight(itemsData, parseFloat(state.weight)).totalPoints,
+      gains: calculateGains(calculatePointsAndDistributeWeight(itemsData, parseFloat(state.weight)).totalPoints)
     };
 
     try {
@@ -381,35 +441,7 @@ const PickupPage = () => {
               ></textarea>
             </div>
 
-            {/* Info */}
-            <div className="flex items-center gap-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="80"
-                height="80"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="lucide lucide-calendar-days-icon text-black"
-              >
-                <path d="M8 2v4" />
-                <path d="M16 2v4" />
-                <rect width="18" height="18" x="3" y="4" rx="2" />
-                <path d="M3 10h18" />
-                <path d="M8 14h.01" />
-                <path d="M12 14h.01" />
-                <path d="M16 14h.01" />
-                <path d="M8 18h.01" />
-                <path d="M12 18h.01" />
-                <path d="M16 18h.01" />
-              </svg>
-              <p className="text-gray-700">
-                Pickup service is available Monday–Saturday, {state.time_slot}. A $5
-                service fee applies for pickups under {state.weight} KG.
-              </p>
-            </div>
+      
 
             <button
               type="submit"
@@ -479,6 +511,8 @@ const PickupPage = () => {
                     refreshHistory={fetchMyPickups}
                     backendUrl={backendUrl}
                     agentName={pickup.deliveryAgentId?.name || ""}
+                    points={pickup.awardedPoints}
+                    gains={pickup.gains}
                   />
                 ))
               ) : (

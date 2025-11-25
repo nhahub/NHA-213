@@ -3,9 +3,10 @@ import mongoose from "mongoose";
 
 const activitySchema = new mongoose.Schema(
   {
-    action: { type: String, required: true }, // مثال: "Recycled 3 bottles"
-    date: { type: Date, default: Date.now },  // مثال: "2025-10-12T09:00:00Z"
-    Points: { type: Number, default: 0 },     // مثال: 150
+    action: { type: String, required: true },
+    date: { type: Date, default: Date.now }, 
+    Points: { type: Number, default: 0 },    
+    gains: { type: Number, default: 0 }
   },
   { _id: false }
 );
