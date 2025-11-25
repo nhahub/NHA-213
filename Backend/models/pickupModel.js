@@ -20,6 +20,8 @@ const pickupSchema = new mongoose.Schema(
     status: { type: String, enum: ["pending", "assigned", "completed"], default: "pending" },
     awardedPoints: { type: Number, default: 0 },
     deliveryAgentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    gains: { type: Number, default: 0 },
+
   },
   { timestamps: true }
 );

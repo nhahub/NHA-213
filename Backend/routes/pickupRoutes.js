@@ -270,6 +270,18 @@ router.put("/:id/complete", authMiddleware, async (req, res) => {
         },
       },
     });
+  await userModel.findByIdAndUpdate(pickup.userId, {
+  $inc: { gains: totalPoints * 0.15 }, // ✅ تحديث الأرباح فقط
+  $push: {
+    activity: {
+      action: `Completed pickup worth ${totalPoints * 0.15} EGP`,
+      points: totalPoints, // ممكن تشيلي ده كمان لو مش عايزة تسجلي النقاط
+      date: new Date(),
+    },
+  },
+});
+
+
 
     // 🔔 Emit event for admin dashboard
     io.emit("update-pickup", pickup);
