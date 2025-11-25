@@ -114,7 +114,7 @@ const RecycleScanner = () => {
             <div className="border rounded-xl p-3 bg-white border-gray-300">
               <div className="flex gap-1 items-center ">
                 <GiProgression className="text-xl mb-3 text-yellow-400" />
-                <h2 className="text-lg font-semibold mb-3">Today's Tasks</h2>
+                <h2 className="text-lg font-semibold mb-3">Today's Progress</h2>
               </div>
 
               <div className="flex gap-1 place-self-center-safe mb-4 ">
