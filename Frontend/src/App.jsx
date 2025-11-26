@@ -22,6 +22,7 @@ import FactsStats from "./pages/FactsStats";
 
 import Profile from "./pages/Profile";
 import ScrollToTop from "./components/ScrollToTop";
+import NotFound from "./pages/NotFound";
 const App = () => {
   return (
     <BrowserRouter>
@@ -71,6 +72,7 @@ const App = () => {
 
         <Route path="pickup" element={<PickupAndDropoff />} />
         <Route path="about-us" element={<Aboutus />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );
