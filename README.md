@@ -1,11 +1,11 @@
-### **BinWise ♻️ — AI-Powered Recycling Management Platform**
+# **BinWise ♻️ — AI-Powered Recycling Management Platform**
 
 BinWise is a full-stack recycling platform that helps users scan waste items, identify materials using Computer Vision (YOLOv8), estimate weight, and earn reward points. Users can redeem rewards through scheduled pickups or in-center drop-offs. Built as a MERN + Python microservice system.
 
 ------------------------------
 ## **Features**
 
-# *AI-Powered Scanner*
+### *AI-Powered Scanner*
 
 Upload or capture a photo
 
@@ -17,7 +17,7 @@ Estimates weight using lookup tables
 
 Calculates reward points & monetary value
 
-# *Pickup & Drop-Off*
+### *Pickup & Drop-Off*
 
 Schedule pickups with date/time
 
@@ -25,7 +25,7 @@ Track pickup status (Pending → Assigned → Completed)
 
 View centers on an interactive map (React Leaflet)
 
-# *User Dashboard*
+### *User Dashboard*
 
 Track total points & monetary gains
 
@@ -33,7 +33,7 @@ See progress, achievements, badges
 
 View scan/pickup history
 
-# *Admin Dashboard*
+### *Admin Dashboard*
 
 Manage all pickups
 
@@ -43,7 +43,7 @@ Track system stats in real-time
 ------------------------------------
 ## **Tech Stack**
 
-# *Frontend*
+### *Frontend*
 
 React.js
 
@@ -53,7 +53,7 @@ React Leaflet
 
 Chart.js
 
-# *Backend*
+### *Backend*
 
 Node.js
 
@@ -67,7 +67,7 @@ Multer
 
 Nodemailer (OTP verification)
 
-# *AI Microservice*
+### *AI Microservice*
 
 Python 3.10
 
@@ -83,7 +83,7 @@ Hosted on HuggingFace Spaces
 ---------------------------------------
 ## **Main User Flows**
 
-# *User Flow*
+### *User Flow*
 
 Sign up → Email verification
 
@@ -95,7 +95,7 @@ Schedule pickup or drop items at centers
 
 Track progress & achievements
 
-# *Admin Flow*
+### *Admin Flow*
 
 Login
 
@@ -107,7 +107,7 @@ Monitor platform activity
 -----------------------------------
 ## **Database (MongoDB)**
 
-# *Main collections:*
+### *Main collections:*
 
 Users (credentials, points, levels)
 
@@ -119,7 +119,7 @@ DeliveryAgents
 
 Scans / AI results
 
-# *Indexes used for:*
+### *Indexes used for:*
 
 Email
 
@@ -158,3 +158,4 @@ AI Microservice: HuggingFace Spaces
 ## **License**
 
 This project is for DEPI graduation purposes. License optional.
+
